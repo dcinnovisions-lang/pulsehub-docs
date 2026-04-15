@@ -1,4 +1,4 @@
-# TrackPro Deployment Guide - Realtime & RBAC Features
+# PulseHub Deployment Guide
 
 ## Pre-Deployment Checklist
 
@@ -65,6 +65,56 @@ psql -U postgres -d trackpro_db -c \
 # Should include: guest, commenter in output
 ```
 
+### Step 1b: Seed Demo Data (Local / Staging ONLY — NOT production)
+
+> ⚠️ **The seed script is for local development and staging environments only.**
+> Never run it on production — it creates demo accounts with known passwords.
+
+The seed script is **idempotent** — completely safe to run multiple times.
+It uses `findOrCreate` everywhere, so it will not duplicate data on re-runs.
+
+```bash
+cd backend
+
+# Full one-command setup (creates DB + runs all migrations + seeds)
+node scripts/setup-db.js
+
+# OR seed only (if DB already exists and migrations already ran)
+node scripts/seed-demo.js
+```
+
+#### What the seed script creates
+
+| Step | What is created |
+|------|----------------|
+| 1 | 9 platform users — one per role |
+| 2 | 2 workspaces: **Acme Corp** and **Dev Team** |
+| 3 | All 9 users added to Acme Corp with matching workspace roles |
+| 4 | 3 projects in Acme Corp + 4 project templates |
+| 5 | Project members added to the "Website Redesign" project |
+| 6 | 4 Kanban statuses per project (Backlog, In Progress, In Review, Done) |
+| 7 | 3 lists per project (Sprint 1, Sprint 2, Backlog) |
+| 8 | 5 sample tasks with assignees and due dates |
+
+#### Demo credentials (after seeding)
+
+| Role | Email | Password | Permissions |
+|------|-------|----------|-------------|
+| `super_admin` | super@pulsehub.dev | Super@123 | Full platform access, manage all workspaces & users |
+| `admin` | admin@pulsehub.dev | Admin@123 | Manage workspace, members, projects |
+| `owner` | owner@pulsehub.dev | Owner@123 | Owns Acme Corp workspace |
+| `billing_admin` | billing@pulsehub.dev | Billing@123 | Manage billing & subscription |
+| `pm` | pm@pulsehub.dev | Pm@123456 | Create/manage projects and tasks |
+| `member` | member@pulsehub.dev | Member@123 | Create and edit tasks |
+| `commenter` | commenter@pulsehub.dev | Comment@123 | Read tasks, add comments only |
+| `guest` | guest@pulsehub.dev | Guest@123 | View-only access |
+| `viewer` | viewer@pulsehub.dev | Viewer@123 | View-only access |
+
+> 💡 **Tip:** Log in as different roles to test RBAC (role-based access control).
+> The `super@pulsehub.dev` account has 2FA enabled — use the QR code on first login.
+
+---
+
 ### Step 2: Install Backend Dependencies
 
 ```bash
@@ -98,7 +148,7 @@ NODE_ENV=production npm start
 # - No errors about socket.io
 
 # Test health endpoint
-curl http://localhost:5000/api/health
+curl http://localhost:5000/api/v1/health
 # Should return: { success: true, message: "API is healthy" }
 ```
 
@@ -301,6 +351,36 @@ socket.on('debug', console.log);
 
 ---
 
+## Production vs Local — Seeding Rules
+
+| Action | Local / Dev | Staging | Production |
+|--------|-------------|---------|------------|
+| `npx sequelize-cli db:migrate` | ✅ Yes | ✅ Yes | ✅ Yes — every deploy |
+| `node scripts/seed-demo.js` | ✅ Yes | ✅ Yes | ❌ **Never** |
+| `node scripts/setup-db.js` | ✅ Yes (first setup) | ✅ Yes (first setup) | ❌ **Never** |
+| `node scripts/setup-db.js --reset` | ✅ Dev only | ❌ No | ❌ **Never** |
+
+### Why seed must never run on production
+
+- Creates **9 accounts with known public passwords** — an attacker who reads this doc can log in immediately
+- Inserts demo workspaces and projects that pollute real customer data
+- The `super_admin` demo account (`super@pulsehub.dev`) has **full platform access**
+
+### What to do on a fresh production deployment instead
+
+```bash
+# 1. Set all environment variables (see .env.example)
+
+# 2. Run migrations only
+npx sequelize-cli db:migrate
+
+# 3. Create the real super admin account manually
+node src/scripts/create-super-admin.js
+# Enter email and password when prompted — use a strong unique password
+```
+
+---
+
 ## Rollback Procedure
 
 If deployment fails and you need to rollback:
@@ -414,4 +494,4 @@ logger.warn('High message throughput detected', { messagesPerSecond: 100 });
 
 **Deployment Status**: ✅ READY FOR PRODUCTION
 
-**Last Updated**: January 2025
+**Last Updated**: April 2026
