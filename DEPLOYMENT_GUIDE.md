@@ -353,31 +353,77 @@ socket.on('debug', console.log);
 
 ## Production vs Local — Seeding Rules
 
-| Action | Local / Dev | Staging | Production |
-|--------|-------------|---------|------------|
+> **Current deployment model**: MVP online demo for client showcase.
+> The seed data IS intentionally run on the production server so clients
+> can explore all roles and features with the pre-built demo accounts.
+
+| Action | Local / Dev | Staging | Production (MVP Demo) |
+|--------|-------------|---------|----------------------|
 | `npx sequelize-cli db:migrate` | ✅ Yes | ✅ Yes | ✅ Yes — every deploy |
-| `node scripts/seed-demo.js` | ✅ Yes | ✅ Yes | ❌ **Never** |
-| `node scripts/setup-db.js` | ✅ Yes (first setup) | ✅ Yes (first setup) | ❌ **Never** |
-| `node scripts/setup-db.js --reset` | ✅ Dev only | ❌ No | ❌ **Never** |
+| `node scripts/seed-demo.js` | ✅ Yes | ✅ Yes | ✅ Yes — first setup |
+| `node scripts/setup-db.js` | ✅ Yes | ✅ Yes | ✅ Yes — first setup |
+| `node scripts/setup-db.js --reset` | ✅ Dev only | ❌ No | ⚠️ Only to reset demo data |
 
-### Why seed must never run on production
-
-- Creates **9 accounts with known public passwords** — an attacker who reads this doc can log in immediately
-- Inserts demo workspaces and projects that pollute real customer data
-- The `super_admin` demo account (`super@pulsehub.dev`) has **full platform access**
-
-### What to do on a fresh production deployment instead
+### First-time production setup
 
 ```bash
-# 1. Set all environment variables (see .env.example)
+# 1. SSH into the server and navigate to the backend folder
+cd /var/www/pulsehub-backend   # or wherever it's deployed
 
-# 2. Run migrations only
+# 2. Install dependencies
+npm install
+
+# 3. Set environment variables
+cp .env.example .env
+nano .env   # fill in DB credentials, JWT_SECRET, etc.
+
+# 4. Full setup: create DB + run all migrations + seed demo data
+node scripts/setup-db.js
+```
+
+### On every subsequent deploy (code update)
+
+```bash
+# Only run migrations — seed is already done, don't re-run it
 npx sequelize-cli db:migrate
 
-# 3. Create the real super admin account manually
-node src/scripts/create-super-admin.js
-# Enter email and password when prompted — use a strong unique password
+# Restart the server
+pm2 restart pulsehub-backend   # if using PM2
+# or
+npm start
 ```
+
+### To reset the demo data (wipe and re-seed)
+
+If a client has made changes and you want to restore the clean demo state:
+
+```bash
+node scripts/setup-db.js --reset
+```
+
+> ⚠️ `--reset` drops and recreates all tables — all client test data will be lost.
+
+### Demo credentials for client showcase
+
+Share these with the client so they can explore each role:
+
+| Role | Email | Password | What to show |
+|------|-------|----------|--------------|
+| `super_admin` | super@pulsehub.dev | Super@123 | Full platform control, user management |
+| `admin` | admin@pulsehub.dev | Admin@123 | Workspace & member management |
+| `owner` | owner@pulsehub.dev | Owner@123 | Owns "Acme Corp" workspace |
+| `billing_admin` | billing@pulsehub.dev | Billing@123 | Billing & subscription tab |
+| `pm` | pm@pulsehub.dev | Pm@123456 | Project creation, task management, Gantt |
+| `member` | member@pulsehub.dev | Member@123 | Day-to-day task work, Kanban board |
+| `commenter` | commenter@pulsehub.dev | Comment@123 | Comment-only access (read + comment) |
+| `viewer` | viewer@pulsehub.dev | Viewer@123 | Read-only view |
+| `guest` | guest@pulsehub.dev | Guest@123 | Limited guest access |
+
+> 💡 **Suggested demo flow for clients:**
+> 1. Login as `pm@pulsehub.dev` → show Kanban, Gantt, Calendar
+> 2. Login as `member@pulsehub.dev` → show task work, comments, time tracking
+> 3. Login as `admin@pulsehub.dev` → show workspace settings, member management
+> 4. Login as `super@pulsehub.dev` → show admin panel, user roles, billing
 
 ---
 
